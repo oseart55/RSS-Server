@@ -6,6 +6,7 @@ import (
 	"main/internal/database"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
@@ -22,7 +23,6 @@ func main() {
 	godotenv.Load()
 	portString := os.Getenv("PORT")
 	DB_URL := os.Getenv("DB_URL")
-
 	if portString == "" {
 		log.Fatal("Could not load PORT from ENV")
 	}
@@ -34,9 +34,13 @@ func main() {
 	if err != nil {
 		log.Fatal("Error connecting to Database")
 	}
+
+	db := database.New(conn)
 	apiCfg := apiConfig{
-		DB: database.New(conn),
+		DB: db,
 	}
+
+	go StartScraping(db, 10, 30*time.Minute)
 
 	router := chi.NewRouter()
 	router.Use(cors.Handler(cors.Options{
@@ -58,6 +62,8 @@ func main() {
 
 	v1Router.Post("/feeds", apiCfg.middlewareAuth(apiCfg.handleCreateFeed))
 	v1Router.Get("/feeds", apiCfg.middlewareAuth(apiCfg.handleGetFeeds))
+
+	v1Router.Get("/posts", apiCfg.middlewareAuth(apiCfg.handleGetPostsForUser))
 
 	router.Mount("/v1", v1Router)
 	router.Handle("/", http.FileServer(http.Dir("./static")))
